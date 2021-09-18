@@ -6,28 +6,57 @@ function net.ReadNumber()
 	end
 	return net.ReadInt(16)
 end
+EVars = EVars or {}
+hook.Add("EntityRemoved","CLR_EVARS", function(e)
+	EVars[e:EntIndex()] = nil
+end)
 net.Receive("GlobalChannel",function(len)
-	local cn,t,nm,vr = net.ReadUInt(8)
-	if cn == 0 then return end
-	for i = 1,cn do
-		t = net.ReadUInt(3)
-		if t == 0 then
-			nm = net.ReadString()
-			GMGlobals[nm] = nil
-			hook.Run("GlobalVarChanged",nm,GMGlobals[nm],nil)
-			continue
-		elseif t == 7 then
-			GMGlobals = net.ReadTable()
-			return
+	local cn = net.ReadUInt(2)
+	local ent = net.ReadUInt(16)
+	if cn == 0 then
+		local nm = net.ReadString()
+		local value = net.ReadType()
+		if ent == 0 then
+			if hook.Run("GlobalVarChanged", nm, GMGlobals[nm], value) then
+				return
+			end
+			GMGlobals[nm] = value
+		else
+			if hook.Run("EntityVarChanged", ent, nm, EVars[ent] and EVars[ent][nm], value) then
+				return
+			end
+			if EVars[ent] == nil then
+				EVars[ent] = {[nm] = value}
+			else
+				EVars[ent][nm] = value
+			end
 		end
-		if types[t] == nil then continue end
-		nm,vr = net.ReadString(),net["Read" .. types[t]]()
-		if string.len(nm) == 0 then continue end
-		--print("read",nm,vr)
-		hook.Run("GlobalVarChanged",nm,GMGlobals[nm],vr)
-		GMGlobals[nm] = vr
+	elseif cn == 1 then
+		local tb = net.ReadTable()
+		for k,v in pairs(tb) do
+			if hook.Run("GlobalVarChanged", k, GMGlobals[k], v) then
+				continue
+			end
+			GMGlobals[k] = v
+		end
+	elseif cn == 2 then
+		ClearGlobals()
+		EVars = {}
 	end
 end)
+local mt = FindMetaTable("Entity")
+function mt:GetNW(var,def)
+	local eid = self:EntIndex()
+	return EVars[eid] and EVars[eid][var] or def
+end
+function mt:SetNW(var,val)
+	local eid = self:EntIndex()
+	if EVars[eid] == nil then
+		Evars[eid] = {[var] = val}
+	else
+		EVars[eid][var] = val
+	end
+end
 function SetGlobal(nm,var)
 	GMGlobals[nm] = var
 end

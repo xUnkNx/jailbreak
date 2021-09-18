@@ -4,15 +4,16 @@ function GM:Initialize()
 	scripted_ents.Alias("func_buyzone","nothing")
 	scripted_ents.Alias("func_bomb_target","nothing")
 	scripted_ents.Alias("func_hostage_rescue","nothing")
-	--RunConsoleCommand("sv_sticktoground","0")
-	--RunConsoleCommand("sv_accelerate","10")
-	--RunConsoleCommand("sv_airaccelerate","100")
 	RunConsoleCommand("mp_show_voice_icons","0")
-	self.PrepareTime = CurTime() + self.PrepareTime
-	--RunConsoleCommand("sv_skyname","sky_day02_01")
+	self.PrepareTime = CurTime() + self.StartPrepare * 2 -- give more time after mapchange
 	for k,v in pairs(weapons.GetList()) do
 		self.AmmoTable[v.ClassName] = v.Primary and v.Primary.Ammo or "smg1"
 	end
+	self:SetRound(Round_Wait)
+	self:SetRoundTime(0)
+	self:TimerSimple(5, function()
+		self:SetGamemode("PvP")
+	end)
 end
 function GM:PostPlayerDeath(ply)
 	if IsValid(ply) then
@@ -125,21 +126,7 @@ function EnginePickupWeapon(ply,wep)
 end
 -- https://github.com/VSES/SourceEngine2007/blob/43a5c90a5ada1e69ca044595383be67f40b33c61/src_main/game/shared/takedamageinfo.cpp#L312-L324
 GM.PostEntityTakeDamage = GM.HandleEntityDamage
-function GM:PlayerUse( ply, ent )
-	if not ply:Alive() then return false end
-	--[[if IsValid(tr) and IsValid(tr.Entity) && (tr.Entity:GetClass() == "func_breakable" || tr.Entity:GetClass() == "func_breakable_surf") && tr.HitPos:Distance(tr.StartPos) < 50 then
-		local dmg = DamageInfo()
-		dmg:SetAttacker(game.GetWorld())
-		dmg:SetInflictor(game.GetWorld())
-		dmg:SetDamage(10)
-		dmg:SetDamageType(DMG_BULLET)
-		dmg:SetDamageForce(ply:GetAimVector() * 500)
-		dmg:SetDamagePosition(tr.HitPos)
-		tr.Entity:TakeDamageInfo(dmg)
-	end]]
-	if not IsValid(ent) or not ent:IsWeapon() then
-		return true
-	end
+function GM:PickupWeapon( ply, ent )
 	if ply:GetGM("NextPickup",0) > CurTime() then
 		return false
 	end
@@ -153,12 +140,12 @@ function GM:PlayerUse( ply, ent )
 			end
 		end
 		if rep ~= nil then
-			ply:SetGM("NextPickup", CurTime() + 1)
+			ply:SetGM("NextPickup", CurTime() + .25)
 			if rep:GetClass() == ent:GetClass() then
 				return false
 			end
-			ply:DropWeapon(rep)
-			if hook.Run("PlayerCanEquipWeapon", ply, ent ) then
+			if hook.Run("PlayerCanEquipWeapon", ply, ent, rep ) then
+				ply:DropWeapon(rep)
 				local p1,a1 = rep:GetPos(),rep:GetAngles()
 				local pos,ang,mv,ph1,col = ent:GetPos(),ent:GetAngles(),ent:GetMoveType(),ent:GetPhysicsObject(),ent:GetCollisionGroup()
 				rep:SetPos(pos)
@@ -184,22 +171,35 @@ function GM:PlayerUse( ply, ent )
 					ph1:SetVelocity(vector_origin)
 					ph1:Sleep()
 				end
-
-				ply:SetGM("NextPickup", CurTime() + 1)
-				ent.PickedUp = ply
-				EnginePickupWeapon(ply,ent)
-			else
-				rep.PickedUp = ply
-				EnginePickupWeapon(ply,rep)
+				ply:SetGM("NextPickup", CurTime() +  .25)
+				EnginePickupWeapon(ply, ent)
+				return true
 			end
-			return false
 		end
 	end
-	if hook.Run("PlayerCanEquipWeapon", ply, ent ) then
-		ply:SetGM("NextPickup", CurTime() + 1)
-		EnginePickupWeapon(ply, ent)
-	end
+	--[[if hook.Run("PlayerCanEquipWeapon", ply, ent ) then
+		ply:SetGM("NextPickup", CurTime() + .25)
+		return true
+	end]]
 	return false
+end
+function GM:PlayerUse( ply, ent )
+	if not ply:Alive() then return false end
+	--[[if IsValid(tr) and IsValid(tr.Entity) && (tr.Entity:GetClass() == "func_breakable" || tr.Entity:GetClass() == "func_breakable_surf") && tr.HitPos:Distance(tr.StartPos) < 50 then
+		local dmg = DamageInfo()
+		dmg:SetAttacker(game.GetWorld())
+		dmg:SetInflictor(game.GetWorld())
+		dmg:SetDamage(10)
+		dmg:SetDamageType(DMG_BULLET)
+		dmg:SetDamageForce(ply:GetAimVector() * 500)
+		dmg:SetDamagePosition(tr.HitPos)
+		tr.Entity:TakeDamageInfo(dmg)
+	end]]
+	if IsValid(ent) and ent:IsWeapon() then
+		-- self:PickupWeapon( ply, ent ) -- its useless because allows to pick up weapons throught walls
+		return false
+	end
+	return true
 end
 function GM:CanPickupAmmo(ply,ent)
 	for k,v in pairs(ply.Weapons) do
@@ -212,10 +212,7 @@ function GM:WeaponEquip(wep,ply)
 	ply.Weapons[wep:GetClass()] = wep
 	if wep.Kind then
 		ply.Slots[wep.Kind] = wep
-		if wep.PickedUp then
-			wep.PickedUp = nil
-			ply:SetGM("SwitchWeapon", wep)
-		elseif wep.Kind == 1 or wep.Kind == 2 then
+		if wep.Kind == 1 or wep.Kind == 2 then
 			local cur = ply:GetActiveWeapon()
 			if IsValid(cur) and cur.Weight and wep.Weight then
 				if cur.Weight == 5 or wep.Weight > cur.Weight then
@@ -244,6 +241,7 @@ function GM:PlayerDroppedWeapon(ply,wep)
 		ply.Slots[wep.Kind] = nil
 	end
 	wep:SetCollisionGroup(COLLISION_GROUP_WEAPON)
+	ply:SetGM("NextDrop", CurTime() + 1)
 end
 function GM:EntityRemoved(ent)
 	if ent:IsWeapon() then
@@ -279,7 +277,7 @@ end
 local function HasWeapon(ply,class)
 	return ply.Weapons[class] ~= nil
 end
-function GM:PlayerCanEquipWeapon(ply,ent)
+function GM:PlayerCanEquipWeapon(ply,ent,rep,internal)
 	if HasWeapon(ply,ent:GetClass()) then
 		if ent.Primary and ent.Primary.ClipMax then
 			local am = ent:GetPrimaryAmmoType()
@@ -294,6 +292,15 @@ function GM:PlayerCanEquipWeapon(ply,ent)
 		return true
 	end
 	if ply.Slots[slot] ~= nil then
+		if rep and rep.Kind == slot then -- if we're replacing weapons
+			return true
+		end
+		return false
+	end
+	return true
+end
+function GM:AllowPlayerPickup(ply,ent)
+	if ent:IsWeapon() then
 		return false
 	end
 	return true
@@ -367,43 +374,85 @@ local SpecFuncs = {
 		ply:SetPos(pos)
 	end
 }
-function PlayerSeeingEntity(ply,ent)
-	local p1,p2,a = ply:EyePos(),ent:GetPos(),ply:EyeAngles()
+local abs = math.abs
+local function normalizeang( a, b )
+	local diff = (a - b  + 180 ) % 360 - 180
+	if ( diff < 180 ) then
+		return abs(diff)
+	end
+	return abs(diff - 360)
+end
+local plmeta, emeta = FindMetaTable("Player"), FindMetaTable("Entity")
+function plmeta:GetABSPos()
+	return self:EyePos()
+end
+function emeta:GetABSPos()
+	return self:GetPos() + self:OBBCenter()
+end
+--local mins, maxs = Vector(-16,-16,-16), Vector(16,16,16)
+function PlayerSeeingEntity(ply, ent, rad, trace)
+	local p1,p2,a = ply:EyePos(), ent:GetABSPos(), ply:EyeAngles()
 	local a1 = (p2 - p1):Angle()
-	a1:Normalize()
-	if math.abs(a1.p - a.p) < 15 and math.abs(a1.y - a.y) < 15 then
-		return true
+	if normalizeang(a1.p, a.p) < rad and normalizeang(a1.y, a.y) < rad then
+		if trace then
+			local tr = util.TraceHull( {
+				start = p1,
+				endpos = p2,
+				mask = MASK_SHOT_HULL,
+				--maxs = maxs,
+				--mins = mins,
+				filter = function(ent1)
+					return ent == ent1
+				end
+			} )
+			--debugoverlay.Sphere(tr.HitPos,3,1)
+			return tr.Entity == ent
+		else
+			return true
+		end
 	end
 	return false
 end
 function GM:PlayerCanPickupWeapon( ply, ent )
 	if ply:Alive() and ply:Team() ~= TEAM_SPECTATOR then
 		if ent:GetPos() == ply:GetPos() then
-			return hook.Run("PlayerCanEquipWeapon", ply, ent, true ) -- its ply:Give func. i.e. internal give
+			return hook.Run("PlayerCanEquipWeapon", ply, ent, nil, true ) -- its ply:Give func. i.e. internal give
 		elseif ply:KeyDown(IN_USE) then
-			self:PlayerUse(ply, ent)
+			if hook.Run("PlayerCanEquipWeapon", ply, ent ) then
+				ent:SetPos(ply:GetABSPos())
+				return true
+			end
 		end
 	end
 	return false
 end
---local mins,maxs = Vector(-10,-10,-10), Vector(10,10,10)
 function GM:KeyPress( ply, key )
-	--[[if ply:Alive() then
+	if ply:Alive() then
 		if key == IN_USE then
-			local tr = util.TraceEntity({start = ply:EyePos(),endpos = ply:OBBCenter() + ply:GetAimVector() * 100}, ply)
-			print(tr.Entity)
-			if IsValid(tr.Entity) then
-				self:PlayerUse(ply,tr.Entity)
+			local tr = util.TraceLine({start = ply:EyePos(), endpos = ply:EyePos() + ply:GetAimVector() * 100, filter = ply})
+			if IsValid(tr.Entity) and tr.Entity:IsWeapon() then
+				self:PickupWeapon(ply, tr.Entity)
 			end
 		end
-	else]]
-	if not ply:Alive() and SpecFuncs[key] and (not ply:GetGM("NextSpawnKey") or ply:GetGM("NextSpawnKey") < CurTime()) then
+	elseif SpecFuncs[key] and (not ply:GetGM("NextSpawnKey") or ply:GetGM("NextSpawnKey") < CurTime()) then
 		ply:SetGM("NextSpawnKey",CurTime() + 1)
 		SpecFuncs[key](ply)
 	end
 end
 function GM:CanDropWeapon(ply,wep)
-	return self.NoDropable[wep:GetClass()] == nil
+	return ply:GetGM("NextDrop",0) < CurTime() and self.NoDropable[wep:GetClass()] == nil
+end
+function GM:AcceptInput(ent,input,activator,caller,value)
+	if self.JailTriggers and self.JailTriggers[ent:GetName()] then
+		if input == "Open" or input == "Disable" then
+			self.Opened = true
+			SetGMBool("JB_Jails",true)
+		elseif input == "Close" or input == "Enable" then
+			self.Opened = false
+			SetGMBool("JB_Jails",false)
+		end
+	end
+	return false
 end
 function GM:InitPostEntityAndMapCleanup()
 	if not self.JailTriggers then
@@ -412,17 +461,6 @@ function GM:InitPostEntityAndMapCleanup()
 			self.JailTriggers = {}
 			for _, trig in pairs(cuc) do
 				self.JailTriggers[trig] = true
-			end
-			self.AcceptInput = function(self1,ent,input,activator,caller,value)
-				if self1.JailTriggers[ent:GetName()] then
-					if input == "Open" or input == "Enable" then
-						self1.Opened = true
-						SetGMBool("JB_Jails",true)
-					elseif input == "Close" or input == "Disable" then
-						self1.Opened = false
-						SetGMBool("JB_Jails",false)
-					end
-				end
 			end
 		else
 			self.JailTriggers = {}
@@ -438,7 +476,7 @@ function GM:InitPostEntityAndMapCleanup()
 		cl = ent:GetClass()
 		if cl == "info_player_counterterrorist" then
 			table.insert(spwns[1],ent)
-		elseif cl == "info_player_terrorist" then
+		elseif cl == "info_player_terrorist" or cl == "info_player_deathmatch" then
 			table.insert(spwns[2],ent)
 		elseif cl == "info_player_start" then
 			table.insert(spwns[3],ent)
@@ -491,7 +529,7 @@ end
 function GM:PlayerLoadout( ply )
 	ply:SetWalkSpeed(200)
 	ply:SetRunSpeed(300)
-	ply:SetCrouchedWalkSpeed(0.4)
+	ply:SetCrouchedWalkSpeed(0.5)
 	ply:SetGravity(0)
 	ply:StripAmmo()
 	ply:SetMaxHealth(100)
@@ -499,12 +537,12 @@ function GM:PlayerLoadout( ply )
 	ply:SetNoCollideWithTeammates( true )
 	ply:SetPlayerColor(ply.CustomPlayerColor or Vector(math.Rand(0,1),math.Rand(0,1),math.Rand(0,1)))
 	ply:SetGM("DefaultColor",ply:GetPlayerColor())
-	ply:SetJumpPower(190)
+	ply:SetJumpPower(210)
 
 	local wep = ply:Give( "weapon_fist" )
 	ply:SetGM( "SwitchWeapon", wep )
 end
-function GM:CanBe(ply, tem)
+function GM:PlayerCanJoinTeam( ply, tem )
 	if tem == TEAM_GUARD then
 		if type(ply.demoted) == "number" then
 			return false
@@ -673,7 +711,7 @@ function GM:DoPlayerDeath( ply, attacker, dmginfo )
 				net.WriteUInt(0,2)
 				net.WriteEntity( ply )
 			net.Broadcast()
-			MsgAll( attacker:Nick() .. " умер.\n" )
+			MsgAll( attacker:Nick() .. " suicided.\n" )
 			return
 		end
 		if IsValid( inflictor ) and inflictor == attacker and (inflictor:IsPlayer() or inflictor:IsNPC()) then
@@ -715,8 +753,8 @@ function GM:DoPlayerDeath( ply, attacker, dmginfo )
 	net.Start( "PlayerKilled" )
 		net.WriteUInt(3,2)
 		net.WriteEntity( ply )
-		net.WriteString( inflictor:GetClass() )
-		net.WriteString( attacker:GetClass() )
+		net.WriteString( IsValid(inflictor) and inflictor:GetClass() or "???" )
+		net.WriteString( IsValid(atacker) and attacker:GetClass() or "worldspawn" )
 	net.Broadcast()
 	ConsoleMsg( _T("KilledByEntity", ply:Nick(), attacker:GetClass()) )
 end
@@ -819,32 +857,6 @@ function GM:PlayerTick(v,mv)
 		local targ = v:GetObserverTarget()
 		if IsValid(targ) and v:GetGM("NextSpawnKey",ct) < ct then
 			v:SetPos(targ:GetPos())
-		end
-	end
-end
-function GM:CheckPlayState()
-	local b,t1,t2
-	if self:GetRound() == Round_In then
-		b,t1,t2 = hook.Run("CountPlayers")
-	end
-	if not b then
-		local cts,ts
-		if t1 and t2 then
-			cts,ts = team.GetPlayers(t1),team.GetPlayers(t2)
-		else
-			cts,ts = team.GetPlayers(TEAM_GUARD),team.GetPlayers(TEAM_PRISIONER)
-		end
-		local ccts,tss = #cts,#ts
-		if ccts == 0 or tss == 0 then
-			if self:GetRound() ~= Round_Wait then
-				self:SetRound(Round_Wait)
-				self:SetRoundTime(0)
-				self:SetGamemode("PvP")
-			end
-			return
-		end
-		if self:GetRound() == Round_Wait then
-			self:SetRound( Round_Start )
 		end
 	end
 end

@@ -2,41 +2,41 @@ local gradient = Material("gui/gradient")
 net.Receive("KilledBy", function(len)
 	local killer,inf,stats,mystats,killby,wpnby = net.ReadEntity(),net.ReadEntity(),net.ReadTable(),net.ReadTable(),"",nil
 	if not IsValid(killer) then
-		killby = "Вы были убиты"
-		wpnby = "миром"
+		killby = _T("YouWasKilledBy")
+		wpnby = _T("World")
 	elseif killer == LocalPlayer() then
-		killby = "Вы совершили суицид"
+		killby = _T("YouDoneSuicide")
 	else
 		if killer:IsPlayer() then
 			killby = killer:Nick()
 		else
 			killby = language.GetPhrase(killer:GetClass())
 		end
-		killby = "Вас убил игрок " .. killby
+		killby = _T("YouWasKilledByPlayer", killby)
 	end
 	if not wpnby then
 		if not IsValid(inf) then
 			if killer == LocalPlayer() then
 				wpnby = ""
 			else
-				wpnby = "мира"
+				wpnby = _T("ByWorld")
 			end
 		else
 			if inf:IsWeapon() then
-				wpnby = "из " .. (inf.PrintName or language.GetPhrase(inf:GetClass()))
+				wpnby = _T("From", inf.PrintName or language.GetPhrase(inf:GetClass()))
 			elseif inf == LocalPlayer() then
 				wpnby = ""
 			elseif inf:IsPlayer() then
 				local wep = inf:GetActiveWeapon()
 				if IsValid(wep) then
-					wpnby = "с помощью " .. (wep.PrintName or language.GetPhrase(wep:GetClass()))
+					wpnby = _T("With", wep.PrintName or language.GetPhrase(wep:GetClass()))
 				else
-					wpnby = "из непонятно чего"
+					wpnby = _T("With", "???")
 				end
 				inf = wep
 			else
 				wpnby = language.GetPhrase(inf:GetClass())
-				wpnby = "с помощью " .. wpnby
+				wpnby = _T("With", wpnby)
 			end
 		end
 	end
@@ -113,7 +113,7 @@ net.Receive("KilledBy", function(len)
 			surface.SetFont("JBHUDFONTMINI")
 			surface.SetDrawColor(255,255,255)
 			surface.SetTextPos(w * .1,h * .2)
-			surface.DrawText("Урон получен:")
+			surface.DrawText(_T("DamageReceived"))
 			for atk,dmg in pairs(self.deathstats) do
 				surface.SetTextPos(w * .15,h * .3 + h * .1 * pos)
 				surface.DrawText(dmg)
@@ -125,7 +125,7 @@ net.Receive("KilledBy", function(len)
 			surface.SetFont("JBHUDFONTMINI")
 			surface.SetDrawColor(255,255,255)
 			surface.SetTextPos(w * .45,h * .2)
-			surface.DrawText("Урон нанесён:")
+			surface.DrawText(_T("DamageGiven"))
 			for atk,dmg in pairs(self.killstats) do
 				surface.SetTextPos(w * .5,h * .3 + h * .1 * pos)
 				surface.DrawText(dmg)

@@ -4,13 +4,16 @@ function GM:ResetGMode()
 		if tm == TEAM_ATTACKER or tm == TEAM_DEFENDER then
 			v:SetTeam(v.GMTeam or TEAM_PRISIONER)
 			v.GMTeam = nil
+		end
+		if tm ~= TEAM_SPECTATOR then
+			v:Freeze(false)
 			if v:Alive() then
 				v:KillSilent()
 			end
+			v:UnSpectate()
 			v:Spawn()
 		end
 	end
-	self:CheckPlayState()
 end
 function GM:StartGameMode( name, spawnall )
 	if self:GetRound() ~= Round_In then return false end
@@ -48,32 +51,24 @@ function GM:SetTeams(t1,t2) -- TODO: Its gamemodes function
 	end
 	self:CheckPlayState()
 end
-function CustomCountPlayers()
-	if not GAMEMODE:TimerExists("GAMEMODERESERVE1") then
-		local dzm,dhm = true,true
-		for k,v in pairs(player.GetAll()) do
-			if v:Team() == TEAM_ATTACKER then
-				if dzm and v:Alive() then
-					dzm = false
-					continue
+function CustomCountPlayers(tm1, tm2)
+	local t1, t2 = false, false
+	for k,v in pairs(player.GetAll()) do
+		if v:Alive() then
+			if v:Team() == tm1 then
+				t1 = true
+				if t2 then
+					break
 				end
-			elseif v:Team() == TEAM_DEFENDER then
-				if dhm and v:Alive() then
-					dhm = false
-					continue
+			elseif v:Team() == tm2 then
+				t2 = true
+				if t1 then
+					break
 				end
 			end
-			if not dzm and not dhm then
-				break
-			end
 		end
-		if dzm and dhm then
-			GAMEMODE:SetRound(Round_End, round_noone)
-			return false
-		end
-		return true,dzm,dhm
 	end
-	return false
+	return t1, t2
 end
 function GM:GiveRandomWeapons()
 end

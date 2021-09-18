@@ -15,7 +15,7 @@ local function qmenusettings()
 	qsq = qcs * qcs
 end
 qmenusettings()
-local qstrtbl,qtext,qlines,qpoly,qang,qcnt,qselect,qent
+local qmenuframe,qstrtbl,qtext,qlines,qpoly,qang,qcnt,qselect
 local function qmenucalc(cnt)
 	qtext,qlines,qpoly,qang,qcnt,qselect = {},{},{},{},cnt-1,nil
 	local cx,cy,cs,ct,sa,off = qcx,qcy,qcs,qct,360 / cnt,qoff
@@ -34,7 +34,7 @@ local function qmenucalc(cnt)
 			qang[i] = {math.NormalizeAngle(sa * i + off),math.NormalizeAngle(sa * i + off + sa)}
 			sv = st[i] + sah
 			sc,ss = cos(rad(sv)),sin(rad(sv))
-			local ft,ft1 = ct-draw.GetFontHeight(qstrtbl[i + 1].tfont)
+			local ft,ft1 = ct - draw.GetFontHeight(qstrtbl[i + 1].tfont)
 			ft1 = ft-draw.GetFontHeight(qstrtbl[i + 1].dfont)
 			local tcy = cy + ss * ft
 			local xx,yy = cx + sc * cs,cy + ss * cs
@@ -51,6 +51,62 @@ local function qmenucalc(cnt)
 		{x = ln[ni][1],y = ln[ni][2],u = uv[ni][1],v = uv[ni][2]}}
 	end
 end
+local function qmenuthink()
+	local x,y = input.GetCursorPos()
+	qselect = nil
+	local dx,dy,dist = x-qcx,y-qcy
+	dist = dx * dx + dy * dy
+	if dist < qsq then
+		return
+	end
+	local grad,a1,a2 = atan2(dy,dx) / pi * 180
+	for i = 0,qcnt do
+		a1,a2 = qang[i][1],qang[i][2]
+		if (grad > a1 and grad < a2) or (a2 < a1 and ((grad > a1 and grad < 180) or (a2 > -180 and grad < a2))) then
+			qselect = i
+		end
+	end
+end
+local function qmenudraw()
+	qmenuthink()
+	local st = qlines
+	for i = 0,qcnt do
+		local info = qstrtbl[i + 1]
+		surface.SetDrawColor(255,255,255,50)
+		surface.DrawLine(st[i][1],st[i][2],st[i][3],st[i][4])
+		surface.SetFont("JBHUDFONTSM")
+		if i < 10 then
+			local t,w,h
+			if i == 9 then
+				t = "0"
+			else
+				t = tostring(i + 1)
+			end
+			w,h = surface.GetTextSize(t)
+			surface.SetTextColor(255,255,255,100)
+			surface.SetTextPos(qtext[i][2] - w * .5,qtext[i][3] - h * .5)
+			surface.DrawText(t)
+		end
+		if not info or info.hidden then continue end
+		if qselect == i then
+			surface.SetDrawColor(100,100,255,150)
+		else
+			surface.SetDrawColor(100,100,100,50)
+		end
+		draw.NoTexture()
+		surface.DrawPoly(qpoly[i])
+	end
+	render.PushFilterMag( TEXFILTER.ANISOTROPIC )
+	render.PushFilterMin( TEXFILTER.ANISOTROPIC )
+	for i = 0,qcnt do
+		local info = qstrtbl[i + 1]
+		if not info or info.hidden then continue end
+		surface.DrawTextRotatedQ(qtext[i][4],qtext[i][5],nang(qtext[i][1] + 90),info.title,info.tcol,info.tfont)
+		surface.DrawTextRotatedQ(qtext[i][6],qtext[i][7],nang(qtext[i][1] + 90),info.desc,info.dcol,info.dfont)
+	end
+	render.PopFilterMag()
+	render.PopFilterMin()
+end
 local MenuBase = {title = "", tcol = color_white, tfont = "JBHUDFONT", desc = "", dcol = color_white, dfont = "JBHUDFONT", think = nil, select = nil}
 function RegisterMenu(menu)
 	for k,v in pairs(menu) do
@@ -62,32 +118,36 @@ function RegisterMenu(menu)
 	end
 	return menu
 end
-function GM:GetQMenuItems()
-	local t = LocalPlayer():Team()
-	if t == TEAM_GUARD then
-		if GetGMEntity("JB_Simon") == LocalPlayer() then
-			return self.Precache.SimonMenu
-		else
-			return self.Precache.CTMenu
+local WepColors = {Color(200,0,0),Color(0,200,0),Color(0,0,200),Color(200,200,0),Color(0,200,200),Color(255,255,255)}
+GM.DropWeaponMenu = {title = _C("DropWeapon"),desc = "#CURWPN#",think = function(s,p)
+	local w = p:GetActiveWeapon()
+	if IsValid(w) then
+		if GAMEMODE.NoDropable[w:GetClass()] then
+			s.hidden = true
+			return
 		end
-	elseif t == TEAM_PRISIONER then
-		return self.Precache.TMenu
-	else
-		return self.Precache.TMenu
+		s.hidden = false
+		s.desc = w.PrintName
+		s.dcol = WepColors[w.Kind or 6] or color_white
 	end
+end, select = function(s,p)
+	net.Start("CMDNET")
+	net.WriteUInt(1,4)
+	net.SendToServer()
+end}
+GM.Precache = GM.Precache or {
+	Default = RegisterMenu({GM.DropWeaponMenu})
+}
+function GM:PrecacheMenu(name,table)
+	self.Precache[name] = table or self.Precache.Default
+end
+function GM:GetQMenuItems()
+	return self.Precache.Default
 end
 hook.Add("PlayerButtonDown","Q_Menu",function(ply,bn)
 	if qmenuactive then
 		if bn == MOUSE_LEFT or bn == MOUSE_RIGHT then
-			local i,tb = qselect
-			if i then
-				tb = qstrtbl[i + 1]
-				if tb and tb.select and not tb.hidden then
-					GAMEMODE:CloseQMenu()
-					tb.select(tb,LocalPlayer())
-					return true
-				end
-			end
+			-- handled by panel
 		else
 			local ct = CurTime()
 			if ButtonCD > ct then return end
@@ -100,7 +160,9 @@ hook.Add("PlayerButtonDown","Q_Menu",function(ply,bn)
 			ButtonCD = ct + ButtonDelay
 			tb = qstrtbl[b]
 			if tb and tb.select and not tb.hidden then
-				GAMEMODE:CloseQMenu()
+				if not tb.keep then
+					GAMEMODE:CloseQMenu()
+				end
 				tb.select(tb,LocalPlayer())
 				return true
 			end
@@ -118,23 +180,49 @@ function GM:OpenQMenu(menu)
 	end
 	qstrtbl = menu
 	local cnt = #qstrtbl
+	if cnt == 0 then
+		return
+	end
 	if cnt == 1 then
 		return qstrtbl[1]:select(LocalPlayer())
 	end
-	if cnt < 4 then
-		qmenucalc(4)
-		qcnt = cnt - 1
-	else
-		qmenucalc(cnt)
-	end
+	qmenucalc(cnt)
 	self:UpdateQMenu()
 	qmenuactive = true
 	input.SetCursorPos(ScrW() * .5,ScrH() * .5)
-	gui.EnableScreenClicker(true)
+	--gui.EnableScreenClicker(true)
+
+	qmenuframe = vgui.Create("DPanel") -- better to handle focus by panels
+	qmenuframe:ParentToHUD()
+	qmenuframe:SetSize(ScrW(), ScrH())
+	qmenuframe:MakePopup()
+	qmenuframe:SetKeyboardInputEnabled(false)
+	function qmenuframe:Paint(w, h)
+		qmenudraw()
+	end
+	function qmenuframe:OnMousePressed()
+		local i,tb = qselect
+		if i then
+			tb = qstrtbl[i + 1]
+			if tb and tb.select and not tb.hidden then
+				if not tb.keep then
+					GAMEMODE:CloseQMenu()
+				end
+				tb.select(tb,LocalPlayer())
+				return true
+			end
+		end
+	end
 end
+local qmenu_toggle = CreateClientConVar("jb_qmenu_toggle","0",true,false,"Should user press Q button to see Q-menu?", 0, 1)
 function GM:CloseQMenu()
 	qmenuactive = false
-	gui.EnableScreenClicker(false)
+	-- gui.EnableScreenClicker(false)
+	if IsValid(qmenuframe) then
+		qmenuframe:Remove()
+		qmenuframe = nil
+	end
+	CloseDermaMenus()
 end
 local mins,maxs = Vector( -10, -10, -10 ),Vector( 10, 10, 10 )
 function GM:GetTraceEnt()
@@ -143,7 +231,7 @@ function GM:GetTraceEnt()
 	if tr.Hit and tr.Entity then
 		return tr.Entity
 	else
-		local tr = util.TraceHull( {start = lp:GetShootPos(),endpos = lp:GetShootPos() + lp:GetAimVector() * 1024,filter = self.Owner,mins = mins,maxs = maxs,mask = MASK_SHOT_HULL})
+		local tr = util.TraceHull( {start = lp:GetShootPos(), endpos = lp:GetShootPos() + lp:GetAimVector() * 1024, filter = self.Owner, mins = mins, maxs = maxs, mask = MASK_SHOT_HULL})
 		if tr.Hit and tr.Entity then
 			return tr.Entity
 		end
@@ -151,90 +239,39 @@ function GM:GetTraceEnt()
 	return nil
 end
 function GM:OnSpawnMenuOpen()
-	qent = self:GetTraceEnt()
-	qstrtbl = self:GetQMenuItems()
-	self:OpenQMenu(qstrtbl)
-end
-GM.OnSpawnMenuClose = GM.CloseQMenu
-local grad = Material("gui/npc.png")
-local function qmenuthink()
-	local x,y = input.GetCursorPos()
-	qselect = nil
-	local dx,dy,dist = x-qcx,y-qcy
-	dist = dx * dx + dy * dy
-	if dist < qsq then
+	if qmenuactive and qmenu_toggle:GetBool() then
+		self:CloseQMenu()
 		return
 	end
-	local grad,a1,a2 = atan2(dy,dx) / pi * 180
-	for i = 0,qcnt do
-		a1,a2 = qang[i][1],qang[i][2]
-		if (grad > a1 and grad < a2) or (a2 < a1 and ((grad > a1 and grad < 180) or (a2 > -180 and grad < a2))) then
-			qselect = i
-		end
+	qent = self:GetTraceEnt()
+	qstrtbl = hook.Run("GetQMenuItems")
+	self:OpenQMenu(qstrtbl)
+end
+function GM:OnSpawnMenuClose()
+	if not qmenu_toggle:GetBool() then
+		self:CloseQMenu()
 	end
 end
 function surface.DrawTextRotatedQ(x,y,ang,text,col,font)
 	surface.SetFont(font)
 	surface.SetTextColor(col)
 	surface.SetTextPos(0,0)
-	local tw,th = surface.GetTextSize(text)
-	tw,th = tw * .5,th * .5
-	local rd,m,dw = -rad(ang),Matrix()
+	local tw, th = surface.GetTextSize(text)
+	tw, th = tw * .5, th * .5
+	local rd, m, dw = -rad(ang), Matrix()
 	if y > qcy then
 		ang = nang(ang + 180)
-		dw,dy = -cos(rd) * - tw + sin(rd) * th * 3,sin(rd) * -tw + cos(rd) * th * 3
+		dw,dy = -cos(rd) * - tw + sin(rd) * th * 3, sin(rd) * -tw + cos(rd) * th * 3
 	else
-		dw,dy = -cos(rd) * tw + sin(rd) * th,sin(rd) * tw + cos(rd) * th
+		dw,dy = -cos(rd) * tw + sin(rd) * th, sin(rd) * tw + cos(rd) * th
 	end
-	x,y=x + dw,y + dy
+	x, y = x + dw, y + dy
 	m:SetAngles(Angle(0,ang,0))
 	m:SetTranslation(Vector(x,y,0))
 	cam.PushModelMatrix(m)
 		surface.DrawText(text)
 	cam.PopModelMatrix()
 end
-hook.Add("HUDPaint","DrawQMenu",function()
-	if qmenuactive then
-		qmenuthink()
-		local st = qlines
-		for i = 0,qcnt do
-			local info = qstrtbl[i + 1]
-			surface.SetDrawColor(255,255,255,50)
-			surface.DrawLine(st[i][1],st[i][2],st[i][3],st[i][4])
-			surface.SetFont("JBHUDFONTSM")
-			if i < 10 then
-				local t,w,h
-				if i == 9 then
-					t = "0"
-				else
-					t = tostring(i+1)
-				end
-				w,h = surface.GetTextSize(t)
-				surface.SetTextColor(255,255,255,100)
-				surface.SetTextPos(qtext[i][2] - w * .5,qtext[i][3] - h * .5)
-				surface.DrawText(t)
-			end
-			if not info or info.hidden then continue end
-			if qselect == i then
-				surface.SetDrawColor(100,100,255,150)
-			else
-				surface.SetDrawColor(100,100,100,50)
-			end
-			draw.NoTexture()
-			surface.DrawPoly(qpoly[i])
-		end
-		render.PushFilterMag( TEXFILTER.ANISOTROPIC )
-		render.PushFilterMin( TEXFILTER.ANISOTROPIC )
-		for i = 0,qcnt do
-			local info = qstrtbl[i + 1]
-			if not info or info.hidden then continue end
-			surface.DrawTextRotatedQ(qtext[i][4],qtext[i][5],nang(qtext[i][1] + 90),info.title,info.tcol,info.tfont)
-			surface.DrawTextRotatedQ(qtext[i][6],qtext[i][7],nang(qtext[i][1] + 90),info.desc,info.dcol,info.dfont)
-		end
-		render.PopFilterMag()
-		render.PopFilterMin()
-	end
-end)
 function GM:UpdateQMenu()
 	local lp = LocalPlayer()
 	for k,v in pairs(qstrtbl) do

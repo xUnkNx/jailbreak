@@ -1,10 +1,9 @@
 GM:InitGamemode(function(self,params)
-	self:SetDay(0)
-	self:SetDayTime(CurTime())
-	self:SetRoundTime(CurTime() + self.Daytime * self.Days)
-	SetGMNil("JB_FDTime")
-	self:SetTeams(TEAM_DEFENDER,TEAM_ATTACKER)
+	self:SetRoundTime(CurTime() + (2 + math.ceil(team.GetCount(TEAM_PRISIONER) / 5)) * self.DayTime + self.RoundPrepare)
+	self:ResetTimers()
 	self:ResetFD()
+	ClearGlobals()
+	self:SetTeams(TEAM_DEFENDER,TEAM_ATTACKER)
 	SetGMBool("JB_Box",false)
 	self:Timer("GAMEMODERESERVE1", 90, 1, function()
 		GlobalMsg(_T("HS_NotHidden", colour_info, CServ(), colour_info))
@@ -30,9 +29,10 @@ GM.HookGamemode("PlayerKilledByPlayer",function(ply,inf,atk)
 	end
 end)
 GM.HookGamemode("PlayerDamagePlayer",function(victim,pl)
-	if victim:Team() == TEAM_ATTACKER then
-		return false
+	if pl:Team() == TEAM_ATTACKER and victim:Team() == TEAM_DEFENDER then
+		return true
 	end
+	return false
 end)
 GM.HookGamemode("PlayerCanEquipWeapon",function(ply,wep)
 	if ply:Team() == TEAM_DEFENDER then
@@ -40,13 +40,17 @@ GM.HookGamemode("PlayerCanEquipWeapon",function(ply,wep)
 	end
 end)
 GM.HookGamemode("CountPlayers",function(cts,ts)
-	local b,dat,def = CustomCountPlayers()
-	if b then
-		if dat then
+	local atk, def = CustomCountPlayers(TEAM_DEFENDER, TEAM_ATTACKER)
+	if atk then
+		if not def then
 			GAMEMODE:SetRound(Round_End, round_winhider)
-		elseif def then
+		end
+	else
+		if def then
 			GAMEMODE:SetRound(Round_End, round_winseeker)
+		else
+			GAMEMODE:SetRound(Round_End, round_alldead)
 		end
 	end
-	return false,TEAM_ATTACKER,TEAM_DEFENDER
+	return true
 end)

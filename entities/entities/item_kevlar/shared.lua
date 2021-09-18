@@ -1,7 +1,7 @@
 AddCSLuaFile()
 ENT.Type = "anim"
 ENT.Base = "base_anim"
-ENT.PrintName = "Kevlar"
+ENT.PrintName = "#Kevlar"
 ENT.Author = "UnkN"
 function ENT:Initialize()
 	self:SetModel"models/xqm/podremake.mdl"

@@ -1,9 +1,6 @@
-local function AddSHLuaFile( file )
-	include( file )
-	AddCSLuaFile( file )
-end
-AddSHLuaFile( "shared.lua" )
-AddSHLuaFile( "sh_rules.lua" )
+include( "shared.lua" )
+AddCSLuaFile( "shared.lua" )
+
 AddSHLuaFile( "sh_lang.lua" )
 AddSHLuaFile( "sh_maps.lua" )
 AddCSLuaFile( "cl_init.lua" )
@@ -16,12 +13,8 @@ include( "sv_hooks.lua" )
 include( "sv_commands.lua" )
 include( "sv_util.lua" )
 include( "sv_gamemodes.lua" )
+include( "sv_ac.lua" )
 AddSHLuaFile( "sh_gamemodes.lua" )
-
-local files = file.Find("gamemodes/jailbreak/gamemode/gui/*.lua","GAME")
-for k,v in pairs(files) do
-	AddCSLuaFile("gui/"..v)
-end
 
 function GM:Dissolve(ent)
 	ent:Kill()
@@ -41,7 +34,6 @@ function GM:Dissolve(ent)
 	end
 end
 --weapons/fx/rics/arrow_impact_crossbow_heal.wav
-
 function CTeam(t)
 	return {team.GetColor(t),team.GetName(t)}
 end
@@ -51,18 +43,18 @@ function CServ(bq)
 end
 function GM:ResetFD() -- TODO: Not a base function
 	for _,v in pairs(team.GetPlayers(TEAM_PRISIONER)) do
-		if v:GetNWInt("FreeDayTime",0) > 0 then
+		if v:GetNW("FreeDayTime",0) > 0 then
 			v:SetGM("FD",nil)
-			v:SetNWInt("FreeDayTime", 0)
+			v:SetNW("FreeDayTime", 0)
 			v:SetPlayerColor(v:GetGM("DefaultColor"))
 			v.NextFD = 200
-			LocalMsg(v,colour_notify, GAMEMODE:Phrase("NextDayFD"))
+			LocalMsg(v,colour_notify, _T("NextDayFD"))
 		end
 	end
 end
 function GM:PlayerCanHearPlayersVoice( list, talk ) -- TODO: Not a base function
 	local tm,tm1,al,al1,c = list:Team(),talk:Team()
-	if tm1 == TEAM_SPECTATOR or tm == TEAM_SPECTATOR then return true end
+	if (tm1 == TEAM_SPECTATOR and talk:IsAdmin()) or (tm == TEAM_SPECTATOR and list:IsAdmin()) then return true end
 	if self:GetRound() ~= Round_In then return true end
 	al,al1,c = list:Alive(),talk:Alive(),false
 	if al == al1 or (al1 and not al) then
@@ -72,7 +64,7 @@ function GM:PlayerCanHearPlayersVoice( list, talk ) -- TODO: Not a base function
 		if tm1 == TEAM_PRISIONER and GetGMBool("JB_PrisGag") then
 			return false
 		end
-		if talk:GetNWBool("JB_Gag") then
+		if talk:GetNW("JB_Gag") then
 			return false
 		end
 		local targetsim = GetGMEntity( "JB_Simon" )
@@ -81,5 +73,26 @@ function GM:PlayerCanHearPlayersVoice( list, talk ) -- TODO: Not a base function
 		end
 		return true
 	end
+	return false
+end
+function GM:PlayerSpawnProp(ply,model)
+	return false
+end
+function GM:PlayerSpawnEffect(ply,effect)
+	return false
+end
+function GM:PlayerSpawnNPC(ply,npc,wep)
+	return false
+end
+function GM:PlayerSpawnSENT(ply, ent)
+	return false
+end
+function GM:PlayerGiveSWEP(ply, arg, swep)
+	return false
+end
+function GM:PlayerSpawnVehicle( ply, model, VName, VTable )
+	return false
+end
+function GM:PlayerSpawnObject( ply, arg1, arg2 )
 	return false
 end

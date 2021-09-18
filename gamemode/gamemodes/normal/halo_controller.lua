@@ -1,14 +1,14 @@
 local dphalo = CreateClientConVar( "jb_duelplayerhalo", 1, true, false )
 local phalo = CreateClientConVar( "jb_playerhalo", 1, true, false )
 local fdhalo = CreateClientConVar( "jb_freedayhalo", 1, true, false )
-local color_yellow,color_blue,color_yel,color_green = Color(255,255,0),Color(0,255,255),Color(255,128,0),Color(0,255,0)
-function GM:PreDrawHalos( )
+local color_yellow,color_blue,color_yel,color_green,color_red = Color(255,255,0),Color(0,255,255),Color(255,128,0),Color(0,255,0),Color(200,50,50)
+GM.HookGamemode("PreDrawHalos",function()
 	if phalo:GetBool() then
 		local t,c,tbl,ren
 		if LocalPlayer():Team() == TEAM_PRISIONER then
-			t,c = TEAM_PRISIONER,color_yellow
+			t,c = TEAM_PRISIONER, color_yellow
 		elseif LocalPlayer():Team() == TEAM_GUARD then
-			t,c = TEAM_GUARD,color_blue
+			t,c = TEAM_GUARD, color_blue
 		end
 		tbl = team.GetAlive(t)
 		if #tbl > 1 then
@@ -20,7 +20,7 @@ function GM:PreDrawHalos( )
 				end
 			end
 			if #ren > 0 then
-				halo.Add( ren, c, 1, 1, 2, true, false )
+				halo.Add( ren, c, 2, 2, 1, true, false )
 			end
 		end
 	end
@@ -34,19 +34,25 @@ function GM:PreDrawHalos( )
 				table.insert(tbl,who)
 			end
 			if #tbl > 0 then
-				halo.Add( tbl, color_yel, 1, 1, 2, true, true )
+				halo.Add( tbl, color_yel, 2, 2, 1, true, true )
 			end
 		end
 	end
 	if fdhalo:GetBool() and LocalPlayer():Team() == TEAM_GUARD then
-		local tbl = {}
+		local fds,rbls = {}, {}
 		for _,v in pairs(team.GetAlive(TEAM_PRISIONER)) do
-			if v:GetNWInt("FreeDayTime",0) >= CurTime() then
-				table.insert(tbl,v)
+			if v:GetNW("FreeDayTime",0) >= CurTime() then
+				fds[#fds + 1] = v
+			end
+			if v:GetNW("Rebel") then
+				rbls[#rbls + 1] = v
 			end
 		end
-		if #tbl > 0 then
-			halo.Add( tbl, color_green, 1, 1, 2, true, false )
+		if #fds > 0 then
+			halo.Add( fds, color_green, 2, 2, 1, true, true )
+		end
+		if #rbls > 0 then
+			halo.Add( rbls, color_red, 2, 2, 1, true, true )
 		end
 	end
-end
+end)

@@ -73,4 +73,5 @@ GM:LoadGamemode("hidenseek")
 GM:LoadGamemode("teamwars")
 GM:LoadGamemode("zombiefd")
 GM:LoadGamemode("defense")
-GM:SetGamemode(GetGMString("JB_GM","normal"),true)
+
+GM:SetGamemode(GetGMString("JB_GM",""),true)

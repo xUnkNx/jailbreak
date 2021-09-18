@@ -105,14 +105,6 @@ end
 function SWEP:Reload()
 	self:Pain()
 end
-local ZombieAttackSequences = {
-	"zombie_attack_01",
-	"zombie_attack_02",
-	"zombie_attack_03",
-	"zombie_attack_04",
-	"zombie_attack_05",
-	"zombie_attack_06"
-}
 function SWEP:PrimaryAttack()
 	local id = math.Round(util.SharedRandom("zf" .. self.Owner:EntIndex(),1,6,CurTime()))
 	local seqdur = self.BaseClass.PrimaryAttack(self, id % 3 == 1)
@@ -131,16 +123,16 @@ function SWEP:Think()
 	if self.Owner:KeyDown(IN_USE) then
 		local tr = self.Owner:GetEyeTraceNoCursor()
 		if tr.Hit and tr.Fraction < 0.001525 then
-			self.Owner:SetNW2Bool("Climbing",true)
+			self.Owner:SetNW("Climbing",true)
 			self.Owner:SetVelocity(Vector(0,0,20))
 			if self.NextStep < CurTime() then
 				self:EmitSound(steps[math.random(1,4)])
 				self.NextStep = CurTime() + 0.4
 			end
 		else
-			self.Owner:SetNW2Bool("Climbing",false)
+			self.Owner:SetNW("Climbing",false)
 		end
 	else
-		self.Owner:SetNW2Bool("Climbing",false)
+		self.Owner:SetNW("Climbing",false)
 	end
 end

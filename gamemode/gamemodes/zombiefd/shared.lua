@@ -3,9 +3,11 @@ GM:AddGamemode(
 	{
 		Usable = true,
 		MinPlayers = 5,
-		RoundDelay = 3
+		RoundDelay = 3,
+		Name = _C("ZombieFD")
 	}
 )
+-- anti heal last player
 include((SERVER and "init" or "cl_init") .. ".lua")
 AddCSLuaFile("cl_init.lua")
 local ZombieAttackSequences = {
@@ -32,7 +34,7 @@ local fastspeed = 375 * 375
 local normalspeed = 275 * 275
 GM.HookGamemode("CalcMainActivity",function(pl, velocity)
 	if pl:Team() ~= TEAM_ATTACKER then return end
-	if pl:GetNW2Bool("Climbing") then
+	if pl:GetNW("Climbing") then
 		return ACT_ZOMBIE_CLIMB_UP, -1
 	end
 	if pl:WaterLevel() >= 3 then

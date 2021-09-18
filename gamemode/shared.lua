@@ -3,9 +3,10 @@ GM.Author = "UnkN"
 GM.Email = "helecopr2@mail.ru"
 DeriveGamemode( "base" )
 
-GM.Days			= 5		-- Количество дней
-GM.Daytime		= 120	-- Секунд в дне
-GM.PrepareTime	= 30	-- Время подготовки в к игре после старта карты
+GM.Days			= 5		-- Days count
+GM.DayTime		= 120	-- Seconds in day
+GM.StartPrepare	= 30	-- Time after PvP to start normal round
+GM.RoundPrepare	= 3		-- Time before round starts (round beginning)
 GM.FDColors		= {
 	Vector(1,0.84,0),
 	Vector(0,0.49,1),
@@ -13,22 +14,21 @@ GM.FDColors		= {
 	Vector(0.03,0.15,0.4),
 	Vector(1,0.9,0.7)
 }
-GM.TCT			= 2.5	-- соотношение заключённых к охране(коэфициент)
-GM.RoundsLeft	= 15	-- Количество раундов до смены карты
-GM.CurrentRound	= 0		-- Текущий раунд относительно старта игры
+GM.TCT			= 2.5	-- ratio of T to CT. I.E. 1 CT = 2.5 T
+GM.RoundsLeft	= 20	-- Rounds before map change
+GM.CurrentRound	= 0		-- Current round relative to game start
 
 TEAM_PRISIONER = 2
 TEAM_GUARD = 3
-TEAM_SPECTATOR = 4
-TEAM_ATTACKER = 5
-TEAM_DEFENDER = 6
+TEAM_ATTACKER = 1 -- 1-4 used to SetNoCollideWithTeammates
+TEAM_DEFENDER = 4
+TEAM_SPECTATOR = 5
 
 Round_Null = 0
-Round_Noone = 1
-Round_Wait = 2
-Round_Start = 3
-Round_In = 4
-Round_End = 5
+Round_Wait = 1
+Round_Start = 2
+Round_In = 3
+Round_End = 4
 
 Point_Here = 0
 Point_Follow = 1
@@ -78,31 +78,60 @@ round_winhider = 12
 round_winseeker = 13
 round_winassault = 14
 round_winguards = 15
+round_battleend = 16
 
 GMGlobals = GMGlobals or {}
 local Globals = GMGlobals
 ReservedGlobals = {}
-function ReserveGlobal(nm)
-	ReservedGlobals[nm] = true
+local keep_kw = "_keep_"
+function ReserveGlobal(nm, default)
+	ReservedGlobals[nm] = default or keep_kw
 end
 function ClearGlobals()
 	for k,v in pairs(Globals) do
-		if ReservedGlobals[k] == nil then
+		local res = ReservedGlobals[k]
+		if res ~= nil then
+			if res ~= keep_kw then
+				Globals[k] = res
+			end
+		else
 			Globals[k] = nil
 		end
 	end
 	if SERVER then
 		net.Start("GlobalChannel")
-		net.WriteUInt(1,8)
-		net.WriteUInt(7,3)
-		net.WriteType(nil)
+			net.WriteUInt(2,2)
 		net.Broadcast()
 	end
 end
-ReserveGlobal("JB_Day")
+--ReserveGlobal("JB_Day")
 ReserveGlobal("JB_Round")
-ReserveGlobal("JB_DayTime")
+--ReserveGlobal("JB_DayTime")
 ReserveGlobal("JB_Time")
+ReserveGlobal("JB_GM")
+
+if SERVER then
+	function AddSHLuaFile( file )
+		include( file )
+		AddCSLuaFile( file )
+	end
+	AddCLLuaFile = AddCSLuaFile
+else
+	AddSHLuaFile = include
+	AddCLLuaFile = include
+end
+function AddDir(dir,func)
+	local files, folds = file.Find("jailbreak/gamemode/" .. dir .. "*","LUA")
+	for k,v in pairs(files) do
+		if string.GetExtensionFromFilename( v ) == "lua" then
+			func(dir .. v)
+		end
+	end
+	for k,v in pairs(folds) do
+		AddDir(dir .. v .. "/", func)
+	end
+end
+AddDir("gui/",AddCLLuaFile)
 
 function team.GetAlive(t)
 	local out,pos = {},1
@@ -114,7 +143,6 @@ function team.GetAlive(t)
 	end
 	return out
 end
--- TODO: fix these funcs theyre same
 function team.GetCount(t)
 	local i = 0
 	for _,p in pairs(player.GetAll()) do
@@ -131,9 +159,9 @@ end
 function GM:CreateTeams()
 	team.SetUp( TEAM_PRISIONER, "T", Color( 255, 0, 0 ) )
 	team.SetUp( TEAM_GUARD, "CT", Color( 0, 0, 255 ) )
-	team.SetUp( TEAM_SPECTATOR, "Spectators", Color( 128, 128, 128 ) )
-	team.SetUp( TEAM_ATTACKER, "Attackers", Color( 255, 0, 0 ) )
-	team.SetUp( TEAM_DEFENDER, "Defenders", Color( 0, 255, 0 ) )
+	team.SetUp( TEAM_SPECTATOR, _C("Spectators"), Color( 128, 128, 128 ) )
+	team.SetUp( TEAM_ATTACKER, _C("Attackers"), Color( 255, 0, 0 ) )
+	team.SetUp( TEAM_DEFENDER, _C("Defenders"), Color( 0, 255, 0 ) )
 end
 function GM:PlayerFootstep( ply, pos, foot, sound, volume, filter )
 	if not ply:Alive() then

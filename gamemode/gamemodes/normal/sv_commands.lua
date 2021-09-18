@@ -33,8 +33,11 @@ GM.Actions["lr"] = GM.Actions["lastrequest"]
 GM:JBCommand("killct",GM.HasLastRequest,{E.player},function(ply) -- jb killct activator
 	local cts = team.GetAlive(TEAM_GUARD)
 	if #cts > 0 then
-		GAMEMODE:TimerSimple(math.Rand(2,5), function()
-			--GlobalMsg(ply, colour_notify, "Благодаря оплошности последнего заключённого, ", CTeam(TEAM_GUARD), colour_notify, " не были убиты.")
+		GAMEMODE:TimerSimple(math.Rand(5,15), function()
+			if not IsValid(ply) or not ply:Alive() then
+				GlobalMsg(_T("PickKillCTFailed",colour_notify, CTeam(TEAM_GUARD), colour_notify))
+				return
+			end
 			for i,m in pairs(cts) do
 				if m:Alive() then
 					if math.random(1,2) == 1 then
@@ -109,7 +112,7 @@ GM:JBCommand("duel",GM.HasLastRequest,{E.player,E.player,E.string},function(ply,
 	if frag:Team() == TEAM_GUARD then
 		local inf = weapons.GetStored(wep)
 		if inf then
-			GAMEMODE:GetSpecGM()[2]:StartDuel(ply,frag,wep)
+			GAMEMODE:GetSpecGM():StartDuel(ply,frag,wep)
 			inf = inf.PrintName and inf.PrintName or "???"
 			local st = random and _T("SelWeaponRandom", colour_notify, colour_weapon, inf) or _T("SelWeapon", colour_notify, colour_weapon, inf)
 			GlobalMsg(_T("PlDuelWith", ply:CNick(), colour_notify, frag:CNick(), colour_notify), st)
@@ -123,6 +126,7 @@ end)
 
 function GM.IsSimon(ply)
 	if ply.InDuel then return false, _T("NotDuel") end
+	if ply:IsAdmin() then return true end
 	if ply:Team() ~= TEAM_GUARD then return false, _T("NotCT") end
 	if GetGMEntity("JB_Simon") ~= ply then return false, _T("NotSimon") end
 	return true
@@ -163,7 +167,7 @@ GM.Actions["simon"] = GM.Actions["setcmd"]
 GM:JBCommand("opencells",GM.IsSimon,{E.playerornull,E.bool},function(e,b)
 	local je = GAMEMODE.JailEntities
 	if not je then return false end
-	local dis, op = b and "Enable" or "Disable", b and "Open" or "Close"
+	local dis, op = b and "Disable" or "Enable", b and "Open" or "Close"
 	for i = 1,#je[1] do
 		je[1][i]:Fire(dis)
 	end
@@ -237,7 +241,7 @@ GM:JBCommand("changeteam",GM.IsSimon,{E.playerornull,E.player},function(ply,v) -
 			if type(v.demoted) == "number" then
 				return false, {_T("Balance", colour_notify), _T("DemotedGuard", colour_warn, CTeam(TEAM_GUARD))}
 			end
-			if GAMEMODE:CanBe(v,TEAM_GUARD) then
+			if hook.Run("PlayerCanJoinTeam", v, TEAM_GUARD) then
 				GAMEMODE:PlayerChangeTeam(v)
 			else
 				return false, {_T("Balance", colour_notify), _T("MuchGuards", colour_warn)}
@@ -257,7 +261,7 @@ GM:JBCommand("point",GM.IsSimon,{E.player,E.int,E.bool,E.int},function(ply,id,bo
 	local trace = util.TraceLine({start = pos, endpos = pos-Vector(0,0,1024)})
 	if bool then
 		if type == 1 then
-			id = "Point" .. math.Clamp(id,1,4)
+			id = "Point" .. math.Clamp(id,0,4)
 			SetGMVector(id,trace.HitPos)
 		elseif type == 2 then
 			id = "PointC" .. math.Clamp(id,1,4)
@@ -344,14 +348,9 @@ GM:JBCommand("bhop",GM.IsSimon,{E.playerornull,E.bool},function(ply,bl) -- jb bh
 	return true
 end)
 GM:JBCommand("collision",GM.IsSimon,{E.playerornull,E.bool},function(ply,bl) -- jb collision activator bool
-	if bl then
-		for _, k in pairs(team.GetAlive(TEAM_PRISIONER)) do
-			k:SetNoCollideWithTeammates(false)
-		end
-	else
-		for _, k in pairs(team.GetAlive(TEAM_PRISIONER)) do
-			k:SetNoCollideWithTeammates(true)
-		end
+	local bl1 = not bl
+	for _, k in pairs(team.GetAlive(TEAM_PRISIONER)) do
+		k:SetNoCollideWithTeammates(bl1)
 	end
 	SetGMBool("JB_Collision", bl)
 	GlobalMsg(_T("SimCollision", CNick(ply), colour_notify, bl))
@@ -366,13 +365,13 @@ GM:JBCommand("givefd",GM.IsSimon,{E.playerornull,E.player,E.bool},function(ply,f
 	if frag:Team() == TEAM_PRISIONER then
 		if bool then
 			frag:SetGM("FD",CurTime() + 240)
-			frag:SetNWInt("FreeDayTime",frag:GetGM("FD"))
+			frag:SetNW("FreeDayTime", frag:GetGM("FD"))
 			frag.NextFD = nil
 			frag:SetPlayerColor(GAMEMODE:TableRandom(GAMEMODE.FDColors))
 		else
 			frag:SetGM("FD",nil)
 			frag.NextFD = nil
-			frag:SetNWInt("FreeDayTime",0)
+			frag:SetNW("FreeDayTime", 0)
 			frag:SetPlayerColor(frag:GetGM("DefaultColor"))
 		end
 		GlobalMsg(_T("SimPlayerFD", CNick(ply), colour_notify, bool, frag:CNick(), colour_notify))
@@ -381,11 +380,11 @@ GM:JBCommand("givefd",GM.IsSimon,{E.playerornull,E.player,E.bool},function(ply,f
 end)
 GM:JBCommand("setalter",GM.IsSimon,{E.playerornull,E.player},function(ply,frag) -- jb setalter activator inflictor
 	if IsValid(frag) then
-		if GetGMEntity("JB_ZamCmd") == frag then
-			SetGMEntity("JB_ZamCmd", NULL)
+		if GetGMEntity("JB_AlterSimon") == frag then
+			SetGMEntity("JB_AlterSimon", NULL)
 			GlobalMsg(_T("SimUnsetAlter", CNick(ply), colour_notify))
 		else
-			SetGMEntity("JB_ZamCmd", frag)
+			SetGMEntity("JB_AlterSimon", frag)
 			GlobalMsg(_T("SimSelectAlter", CNick(ply), colour_notify, frag:CNick(), colour_notify))
 		end
 		return true
@@ -401,32 +400,122 @@ end)
 GM:JBCommand("startgm",GM.IsSimon,{E.playerornull,E.string},function(ply,str) -- jb startgm activator integer
 	if GetGMString("JB_GM") ~= "Normal" then return false, _T("GMNotNormal") end
 	if GAMEMODE.SpecDays[str] == nil then return false, _T("GMNotExists") end
-	if GAMEMODE:GetDay() ~= 1 then return false, _T("GMFirstDay") end
+	if CurTime() - GAMEMODE.DayTime > GAMEMODE:GetRoundStartTime() then return false, _T("GMFirstDay") end
 	return GAMEMODE:StartGameMode(str,true)
 end)
 GM:JBCommand("gag",GM.IsSimon,{E.playerornull,E.player,E.bool},function(ply,inf,bl) -- jb gag activator inflictor bool
-	inf:SetNWBool("JB_Gag",bl)
+	inf:SetNW("JB_Gag",bl)
 	GlobalMsg(_T("SimMutePl", CNick(ply), colour_notify, bl, inf:CNick()))
 	return true
 end)
 GM:JBCommand("pickup",GM.IsSimon,{E.playerornull,E.bool},function(ply,bl) -- jb pickup activator bool
+	SetGMBool("JB_Pickup", bl)
+	GlobalMsg(_T("SimPickup", CNick(ply), colour_notify, bl))
 	return true
 end)
 GM:JBCommand("avoidness",GM.IsSimon,{E.playerornull,E.bool},function(ply,bl) -- jb avoidness activator bool
+	SetGMBool("JB_Avoidness", bl)
+	for k,v in pairs(team.GetAlive(TEAM_PRISIONER)) do
+		v:SetAvoidPlayers(bl)
+	end
+	GlobalMsg(_T("SimAvoidness", CNick(ply), colour_notify, bl))
 	return true
 end)
 GM:JBCommand("propdamage",GM.IsSimon,{E.playerornull,E.bool},function(ply,bl) -- jb propdamage activator bool
+	SetGMBool("JB_PropDamage", bl)
+	GlobalMsg(_T("SimPropDamage", CNick(ply), colour_notify, bl))
 	return true
 end)
-GM:JBCommand("tspawn",GM.IsSimon,{E.playerornull,E.player,E.bool},function(ply,inf,cancel) -- jb tspawn activator inflictor bool
+GM:JBCommand("respawn",GM.IsSimon,{E.playerornull,E.player,E.bool},function(ply,inf,cancel) -- jb tspawn activator inflictor bool
+	if inf:GetGM("SpawnedOnce") then
+		return false, _T("SimSpawnedAlready", inf:CNick(), colour_notify)
+	end
+	if inf:Alive() then
+		return false, _T("SimAlreadyAlive", inf:CNick(), colour_notify)
+	end
+	inf:SetGM("SpawnedOnce",true)
+	local pos, ang
+	if cancel then
+		if inf:GetGM("DiePos") then
+			pos = inf:GetGM("DiePos")
+			ang = inf:GetGM("DieAngles",Angle())
+		else
+			cancel = false -- in case if we failed
+		end
+	end
+	inf:Spawn()
+	if pos then
+		inf:SetPos(pos)
+		inf:SetAngles(ang)
+	end
+	GlobalMsg(_T("SimRespawn", CNick(ply), colour_notify, CNick(inf), colour_notify, cancel))
 	return true
 end)
-GM:JBCommand("spawn",GM.IsSimon,{E.playerornull,E.string},function(ply,name) -- jb spawn activator name
-	return true
+GM:JBCommand("spawn",GM.IsSimon,{E.playerornull,E.int},function(ply,id) -- jb spawn activator name
+	local gm = GAMEMODE:GetSpecGM()
+	if gm.Spawnable[id] then
+		local tb = gm.Spawnable[id]
+		if ply:GetGM("SpawnedCount",0) >= gm.SimonMaxProps then
+			return false, _T("SimonOverflowLimit", gm.SimonMaxProps)
+		end
+		local e = DoPlayerEntitySpawn(ply, tb.type, tb.model or "", tb.skin or 0)
+		undo.Create( "Spawnable" )
+			undo.SetPlayer( ply )
+			undo.AddEntity( e )
+			cleanup.Add(ply, "Spawnable", e)
+		undo.Finish( tostring( tb.name ) )
+		e:CallOnRemove( "GetCountUpdate", function( ent, ply )
+			if IsValid(ply) and GetGMEntity("JB_Simon") == ply then
+				ply:SetGM("SpawnedCount", ply:GetGM("SpawnedCount", 1) - 1)
+			end
+		end, ply )
+		ply:SetGM("SpawnedCount", ply:GetGM("SpawnedCount", 0) + 1)
+
+		if tb.func then
+			tb.func(e,ply)
+		end
+		return true
+	else
+		return false, _T("ObjectNotExists")
+	end
 end)
 GM:JBCommand("remove",GM.IsSimon,{E.playerornull,E.entity},function(ply,ent) -- jb remove activator entity
+	if IsValid(ent) then
+		local gm = GAMEMODE:GetSpecGM()
+		if gm.ValidProps[ent:GetClass()] then
+			SafeRemoveEntity(ent)
+		end
+	end
 	return true
 end)
 GM:JBCommand("weaponbox",GM.IsSimon,{E.playerornull,E.string},function(ply,name) -- jb weaponbox activator name
+	return true
+end)
+GM:JBCommand("flashlight",GM.IsSimon,{E.playerornull,E.bool},function(ply,bl) -- jb flashlight activator bool
+	SetGMBool("JB_Flashlight", bl)
+	for k,v in pairs(team.GetAlive(TEAM_PRISIONER)) do
+		v:AllowFlashlight(bl)
+	end
+	GlobalMsg(_T("SimFlashlight", CNick(ply), colour_notify, bl, CTeam(TEAM_PRISIONER), colour_notify))
+	return true
+end)
+GM:JBCommand("count",GM.IsSimon,{E.playerornull},function(ply) -- jb count activator
+	local count = {}
+	local cnt, count1 = 0, 0
+	for k,v in pairs(team.GetAlive(TEAM_PRISIONER)) do
+		count1 = count1 + 1
+		if PlayerSeeingEntity(ply, v, 60, true) then
+			cnt = cnt + 1
+		else
+			count[#count + 1] = v:Nick()
+		end
+	end
+	GlobalMsg(_T("SimCountT", CNick(ply), colour_notify, cnt, CTeam(TEAM_PRISIONER)))
+	if cnt < count1 then
+		GlobalMsg(_T("SimCountNT", colour_notify, CTeam(TEAM_PRISIONER), colour_notify, colour_warn, table.concat(count,", ")))
+	end
+	return true
+end)
+GM:JBCommand("buy",GM.IsSimon,{E.player,E.string},function(ply,wep)
 	return true
 end)

@@ -88,20 +88,8 @@ function net.WriteNumber(v)
 	end
 end
 OQueue = OQueue or {}
-local function QueueValue(ply,k,v,s,vr)
-	if OQueue[ply] == nil then
-		OQueue[ply] = {{k,v,s,vr}}
-	else
-		OQueue[ply][#OQueue[ply] + 1] = {k,v,s,vr}
-	end
-end
-local function SendValue(t)
-	net.WriteUInt(t[1],3)
-	net.WriteString(t[3])
-	if t[1] ~= 0 then
-		net["Write" .. t[2]](t[4])
-	end
-	--print("write",t[3],t[2],t[4])
+local function QueueValue(id, s, vr, to)
+	OQueue[#OQueue + 1] = {id, s, vr, to}
 end
 local types = {"Angle","Bool","Entity","Number","String","Vector"}
 for k,v in pairs(types) do
@@ -113,13 +101,16 @@ for k,v in pairs(types) do
 			return
 		end
 		GMGlobals[s] = vr
-		QueueValue("all",k,v,s,vr)
+		QueueValue(0, s, vr)
 	end
 end
 _G.GetGMInt,_G.GetGMFloat,_G.SetGMInt,_G.SetGMFloat = _G.GetGMNumber,_G.GetGMNumber,_G.SetGMNumber,_G.SetGMNumber
 function _G.SetGMNil(s)
+	if not force and GMGlobals[s] == nil then
+		return
+	end
 	GMGlobals[s] = nil
-	QueueValue("all",0,nil,s,nil)
+	QueueValue(0, s, nil)
 end
 function SetGlobal(nm,var)
 	GMGlobals[nm] = var
@@ -138,25 +129,33 @@ hook.Add("Tick","Networking",function()
 	if i ~= nil then
 		OQueue[i] = nil
 		net.Start("GlobalChannel")
-		if m[1] ~= nil then
-			net.WriteUInt(#m,8)
-			for _,v in pairs(m) do
-				SendValue(v)
-			end
-		else
-			net.WriteUInt(1,8)
-			net.WriteUInt(7,3)
-			net.WriteTable(m)
-		end
-		if i ~= "all" then
-			net.Send(i)
+			net.WriteUInt(0, 2)
+			net.WriteUInt(m[1], 16)
+			net.WriteString(m[2])
+			net.WriteType(m[3])
+		if m[4] then
+			net.Send(m[4])
 		else
 			net.Broadcast()
 		end
 	end
 end)
-hook.Add("PlayerInitialSpawn","NW3",function(ply)
-	OQueue[ply] = GMGlobals
+hook.Add("PlayerFullLoad","NW3",function(ply)
+	net.Start("GlobalChannel")
+		net.WriteUInt(1, 2)
+		net.WriteUInt(0, 16)
+		net.WriteTable(GMGlobals)
+	net.Send(ply)
+	for k,v in pairs(player.GetAll()) do
+		if v == ply then continue end
+		if v.NWVars and next(v.NWVars) ~= nil then
+			net.Start("GlobalChannel")
+				net.WriteUInt(1, 2)
+				net.WriteUInt(v:EntIndex(), 16)
+				net.WriteTable(v.NWVars)
+			net.Send(ply)
+		end
+	end
 end)
 --==Other==--
 util.AddNetworkString("SelectTeam")
@@ -170,7 +169,7 @@ net.Receive("SelectTeam", function(length, ply)
 				LocalMsg(ply,colour_warn, _T("Balance","YouDemoted"))
 				return
 			end
-			if GAMEMODE:CanBe(ply,TEAM_GUARD) then
+			if hook.Run("PlayerCanJoinTeam", ply, TEAM_GUARD) then
 				ply:KillSilent()
 				ply:SetTeam(TEAM_GUARD)
 				if GAMEMODE:GetRound() < Round_In then
@@ -253,15 +252,32 @@ function PlayMeta:CNick()
 end
 function GM:PrePlayerInitialize(ply)
 	ply.GMVars = {}
+	ply.SHVars = {}
+	hook.Add( "SetupMove", ply, function( self, ply, _, cmd )
+		if self == ply and not cmd:IsForced() then
+			hook.Remove( "SetupMove", self )
+			hook.Run( "PlayerFullLoad", self )
+		end
+	end )
 end
 function PlayMeta:SetGM(var,val)
 	self.GMVars[var] = val
 end
+function PlayMeta:SetNW(var, val, plrs)
+	if self.SHVars[var] ~= val then
+		self.SHVars[var] = val
+		QueueValue(self:EntIndex(), var, val, plrs)
+	end
+end
 function PlayMeta:ClearGM()
 	self.GMVars = {}
+	self.SHVars = {}
 end
-function PlayMeta:GetGM(var,def)
+function PlayMeta:GetGM(var,def,sync)
 	return self.GMVars[var] or def
+end
+function PlayMeta:GetNW(var,def)
+	return self.SHVars[var] or def
 end
 concommand.Add("jb_teamchat",function(ply,args)
 	ply:SetTeamVoice(args[1] == 1 or false)
@@ -275,3 +291,40 @@ function GM:PlayerSetHandsModel( ply, ent )
 		ent:SetBodyGroups( info.body )
 	end
 end
+
+local pentime = 30
+local mt = FindMetaTable"CMoveData"
+local SysTime,Origin,Angles,Buttons = SysTime,mt.GetOrigin,mt.GetAngles,mt.GetButtons
+hook.Add("PlayerTick","AFK",function(ply,mv)
+	if not ply:Alive() then return end
+	local afkt = ply.AFKT
+	if afkt == nil then
+		ply.AFKT = { Origin(mv), Angles(mv), Buttons(mv) }
+	else
+		local origin, angles, buttons = Origin(mv), Angles(mv), Buttons(mv)
+		if (afkt[1] ~= origin or afkt[2] ~= angles) and afkt[3] ~= buttons then
+			if ply.AFK then
+				ply.AFK = nil
+				if ply.IsAFK then
+					ply.IsAFK = false
+					hook.Run("PlayerChangePlayState", ply, false)
+				end
+			end
+		else
+			if ply.AFK == nil then
+				ply.AFK = SysTime()
+			else
+				if SysTime() - ply.AFK > pentime and not ply.IsAFK then
+					ply.IsAFK = true
+					hook.Run("PlayerChangePlayState", ply, true)
+				end
+			end
+		end
+		afkt[1] = Origin(mv)
+		afkt[2] = Angles(mv)
+		afkt[3] = Buttons(mv)
+	end
+end)
+hook.Add("PlayerSpawn","AFK",function(ply)
+	hook.Run("PlayerChangePlayState", ply, ply.IsAFK)
+end)

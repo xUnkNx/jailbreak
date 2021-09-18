@@ -4,8 +4,8 @@ end
 local E = {
 	player = 1, entity = 2,int = 3,bool = 4,string = 5,playerornull = 6,angle = 7,vector = 8,null = 9,color = 10,float = 11}
 GM.TypeEnum = E
-GM.TypeCheck = {[E.player] = function(p) return isentity(p) and p:IsPlayer() and p:Alive() end,
-[E.playerornull] = function(p) return IsValid(p) and (p:IsPlayer() and p:Alive()) or p == NULL end,
+GM.TypeCheck = {[E.player] = function(p) return isentity(p) and p:IsPlayer() end,
+[E.playerornull] = function(p) return IsValid(p) and p:IsPlayer() or p == NULL end,
 [E.entity] = function(e) return isentity(e) and not e:IsPlayer() and not e:IsNPC() end,
 [E.null] = function(e) return e == NULL end,[E.int] = tonumber,[E.float] = tonumber,
 [E.bool] = isbool,[E.string] = isstring,[E.angle] = isangle,[E.vector] = isvector,[E.color] = IsColor}

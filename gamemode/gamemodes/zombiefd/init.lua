@@ -32,19 +32,20 @@ local function FindZombie()
 	end
 end
 GM:InitGamemode(function(self,params)
-	self:SetDay(0)
-	self:SetDayTime(CurTime())
-	self:SetRoundTime(CurTime() + self.Daytime * 5)
-	SetGMNil("JB_Simon")
-	SetGMNil("JB_FDTime")
-	self:SetTeams(TEAM_DEFENDER,TEAM_DEFENDER)
+	self:SetRoundTime(CurTime() + self.DayTime * 4)
+	self:ResetTimers()
 	self:ResetFD()
+	ClearGlobals()
+	self:SetTeams(TEAM_DEFENDER,TEAM_DEFENDER)
+	for k,v in pairs(team.GetPlayers(TEAM_DEFENDER)) do
+		self:SetForceVisible(v, true) -- zombies should see anyone
+	end
 	self:Timer("GAMEMODERESERVE1", 30, 1, function()
 		FindZombie(self)
 		SetGMInt("Wave",1)
 		GlobalMsg(_T("ZFD_Wave", colour_info, 1))
 		PlaySurfaceSound("ambient/creatures/town_zombie_call1.wav")
-		self:Timer("GAMEMODERESERVE2", self.Daytime, 2, function()
+		self:Timer("GAMEMODERESERVE2", self.DayTime, 2, function()
 			SetGMInt("Wave",GetGMInt("Wave") + 1)
 			if self.Wave == 3 then
 				GlobalMsg(_T("ZFD_FinalWave", colour_info))
@@ -53,11 +54,11 @@ GM:InitGamemode(function(self,params)
 			end
 		end)
 	end)
-	GlobalMsg(_T("ZFD_Begin", colour_message, 30))
+	GlobalMsg(_T("ZFD_Begin", colour_message))
 	if not self.Opened then
 		self:JBRun("opencells",NULL,true)
 	end
-	GlobalMsg(_T("ZFD_Desc",colour_info))
+	GlobalMsg(_T("ZFD_Desc",colour_info, 30))
 	--[[self:Timer("GAMEMODERESERVE3", 5, 0, function()
 		for k,v in pairs(team.GetPlayers(TEAM_ATTACKER)) do
 			if not v:Alive() then
@@ -116,22 +117,22 @@ GM.HookGamemode("PlayerLoadout",function(ply)
 		ply:SetMaxHealth(300)
 		if typ == 1 then
 			ply:SetModel("models/player/zombie_classic.mdl")
-			ply:SetCrouchedWalkSpeed(0.8)
-			ply:SetMaxHealth(450 + wave * 50)
-			ply:SetWalkSpeed(325 + wave * 25)
-			ply:SetJumpPower(250 + wave * 20)
+			ply:SetCrouchedWalkSpeed(0.4)
+			ply:SetMaxHealth(150 + wave * 50) -- 300
+			ply:SetWalkSpeed(300 + wave * 15) -- 345
+			ply:SetJumpPower(210 + wave * 7.5) -- 235.5
 		elseif typ == 2 then
 			ply:SetModel("models/player/zombie_fast.mdl")
-			ply:SetCrouchedWalkSpeed(1)
-			ply:SetMaxHealth(300 + wave * 33.3)
-			ply:SetWalkSpeed(400 + wave * 50)
-			ply:SetJumpPower(280 + wave * 30)
+			ply:SetCrouchedWalkSpeed(0.5)
+			ply:SetMaxHealth(100 + wave * 33.33) -- 200
+			ply:SetWalkSpeed(315 + wave * 15) -- 360
+			ply:SetJumpPower(210 + wave * 15) -- 255
 		elseif typ == 3 then
 			ply:SetModel("models/player/zombie_soldier.mdl")
-			ply:SetCrouchedWalkSpeed(0.6)
-			ply:SetMaxHealth(600 + wave * 100)
-			ply:SetWalkSpeed(250 + wave * 33)
-			ply:SetJumpPower(220 + wave * 10)
+			ply:SetCrouchedWalkSpeed(0.3)
+			ply:SetMaxHealth(300 + wave * 33.33) -- 400
+			ply:SetWalkSpeed(285 + wave * 15) -- 330
+			ply:SetJumpPower(180 + wave * 10) -- 210
 		end
 		ply:SetGM("OriginalModel",ply:GetModel())
 		ply:SetNoCollideWithTeammates(true)
@@ -149,6 +150,7 @@ GM.HookGamemode("PlayerLoadout",function(ply)
 		ply:SetAvoidPlayers(false)
 	end
 	ply:SetupHands()
+	return true
 end)
 GM.HookGamemode("PlayerDamagePlayer",function(vict,atk)
 	if vict:Team() == TEAM_DEFENDER and atk:Team() == TEAM_ATTACKER then
@@ -163,6 +165,13 @@ GM.HookGamemode("PlayerDamagePlayer",function(vict,atk)
 end)
 GM.HookGamemode("EntityTakeDamage",function(vict,dmg)
 	if vict:IsPlayer() and vict:Team() == TEAM_ATTACKER then
+		local atk = dmg:GetAttacker()
+		if IsValid(atk) and atk:IsPlayer() and atk:Team() == TEAM_DEFENDER then
+			local dist = atk:GetPos():DistToSqr(vict:GetPos())
+			if dist > 250000 then
+				dmg:SetDamage( dmg:GetDamage() * math.Clamp(250000 / dist, 0.25, 1))
+			end
+		end
 		if math.random(1,3) == 1 and dmg:GetDamage() > 10 then
 			vict:EmitSound("npc/zombie/zombie_pain" .. math.random(1,6) .. ".wav")
 		end
@@ -180,11 +189,25 @@ GM.HookGamemode("PlayerUse",function(ply,ent)
 		return false
 	end
 end)
---[[GM.HookGamemode("EquipWeapon",function(ply,wep)
-	if wep.Base == "weapon_css_base" then
-		wep.InfiniteAmmo = true
+GM.HookGamemode("WeaponEquip",function(wep, ply)
+	if not wep.AlreadyInf then
+		wep.AlreadyInf = true
+		if wep:GetMaxClip1() > 5 then
+			local count = math.min(wep:GetMaxClip1() * 20, 999)
+			ply:GiveAmmo(count, game.GetAmmoName(wep:GetPrimaryAmmoType()))
+		end
 	end
-end)]]
+end)
+GM.HookGamemode("PlayerDroppedWeapon",function(ply, wep)
+	if wep.AlreadyInf then
+		wep.AlreadyInf = nil
+		if wep:GetMaxClip1() > 5 then
+			local atype = game.GetAmmoName(wep:GetPrimaryAmmoType())
+			local count = ply:GetAmmoCount(atype)
+			ply:RemoveAmmo(count, atype)
+		end
+	end
+end)
 GM.HookGamemode("OnTimeout",function()
 	if not GetGMBool("Ended") then
 		PlaySurfaceSound("ambient/atmosphere/city_beacon_loop1.wav")
@@ -212,18 +235,24 @@ end)
 local WinZombie = {"ambient/levels/citadel/weaponstrip1_adpcm.wav","ambient/levels/citadel/citadel_ambient_voices1.wav","ambient/levels/citadel/citadel_ambient_scream_loop1.wav","ambient/levels/citadel/citadel_drone_loop3.wav",
 "ambient/levels/citadel/citadel_drone_loop5.wav"}
 GM.HookGamemode("CountPlayers",function()
-	local a1 = 0
+	local a1, z1 = 0, 0
 	for k,v in pairs(player.GetAll()) do
 		local tm = v:Team()
 		if tm == TEAM_DEFENDER and v:Alive() then
 			a1 = a1 + 1
-		elseif tm ~= TEAM_ATTACKER and tm ~= TEAM_SPECTATOR then
+		elseif tm == TEAM_ATTACKER then
+			z1 = z1 + 1
+		elseif tm ~= TEAM_SPECTATOR then
 			v:SetTeam(TEAM_ATTACKER) -- force joined players to be zombies
 		end
 	end
 	if a1 == 0 then
-		PlaySurfaceSound(GAMEMODE:TableRandom(WinZombie))
-		GAMEMODE:SetRound(Round_End, round_winzombie)
+		if z1 > 0 then
+			PlaySurfaceSound(GAMEMODE:TableRandom(WinZombie))
+			GAMEMODE:SetRound(Round_End, round_winzombie)
+		else
+			GAMEMODE:SetRound(Round_End, round_alldead)
+		end
 	elseif a1 == 1 then
 		local surv = team.GetAlive(TEAM_DEFENDER)[1]
 		if GetGMEntity("ZFD_LastSurvivorP") == nil and IsValid(surv) and surv:Alive() then

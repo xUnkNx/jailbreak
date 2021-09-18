@@ -1,8 +1,7 @@
 GM:InitGamemode(function(self,params)
-	ClearGlobals()
-	self:ResetGMode()
-	game.SetTimeScale(1)
 	self:ResetTimers()
+	self:ResetFD()
+	ClearGlobals()
 	self:JBRun("opencells",NULL,true)
 	GlobalMsg(_T("PVPReason", colour_message))
 	for k,v in pairs(ents.FindByClass("trigger_hurt")) do
@@ -18,16 +17,16 @@ GM.HookGamemode("PlayerLoadout",function(ply)
 	ply:AllowFlashlight(true)
 end)
 GM.HookGamemode("AcceptInput",function(ent,inp)
-	if GAMEMODE.JailTriggers and GAMEMODE.JailTriggers[ent:GetName()] and (inp == "Close" or inp == "Enable" or inp == "Toggle") then
+	if GAMEMODE.JailTriggers and GAMEMODE.JailTriggers[ent:GetName()] and (inp == "Close" or inp == "Enable" or inp == "Toggle") then -- prevent cells open
 		return true
-	elseif ent:GetClass() == "trigger_hurt" then
+	elseif ent:GetClass() == "trigger_hurt" then -- prevent activate hidden triggers like jb_new_summer_v2
 		return true
 	end
 end)
 GM.HookGamemode("PlayerCanSpawn",function()
 	return true
 end)
-GM.HookGamemode("OnTimeout",function()
+GM.HookGamemode("OnTimeout",function() -- in case if gamemode bugged
 	GAMEMODE:SetRound(Round_Wait)
 	ClearGlobals()
 	GAMEMODE:ResetTimers()

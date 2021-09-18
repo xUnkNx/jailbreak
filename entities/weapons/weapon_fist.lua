@@ -1,6 +1,6 @@
 local a, IsValid, c, d = CurTime, IsValid, Vector, Sound
 AddCSLuaFile()
-SWEP.PrintName = "Руки"
+SWEP.PrintName = "#Hands"
 SWEP.Spawnable = true
 SWEP.UseHands = true
 SWEP.DrawAmmo = false
@@ -78,7 +78,7 @@ function SWEP:PhysHit(tr,dmg)
 	end
 end
 -- https://github.com/VSES/SourceEngine2007/blob/43a5c90a5ada1e69ca044595383be67f40b33c61/src_main/game/shared/takedamageinfo.cpp#L312-L324
-local physman = 75 * 4 * 50
+local physman = 75 * 4
 function SWEP:Hit(h)
 	local i = false
 	if IsValid(h.Entity) then
@@ -103,7 +103,7 @@ function SWEP:Hit(h)
 				dmg:SetDamage(self.UppercutDamage + math.random(-2, 2))
 			end
 
-			local force = own:EyeAngles():Forward()
+			local force = own:EyeAngles():Forward() + h.HitPos - h.StartPos
 			force = force * dmg:GetDamage() * physman
 			dmg:SetDamageForce(force)
 

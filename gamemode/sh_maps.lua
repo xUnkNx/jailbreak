@@ -14,6 +14,7 @@ GM.OpenJails = {
 	["ba_1abcore_jail"] = {"d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"},
 	["ba_jail_desert"] = {"celldoor"},
 	["ba_extreme_jail"] = {"jail1"},
+	["jb_extreme_jail"] = {"door_knast1"},
 	["ba_hs_jail_2_icy"] = {"1"},
 	["ba_jail_6"] = {"door_01", "door_01a", "door_02", "door_02a"},
 	["ba_jail_alpha"] = {"wall"},
@@ -63,5 +64,6 @@ GM.OpenJails = {
 	["jb_lost_planet_v1"] = {"cells1", "cells2"},
 	["jb_piranesi_02c"] = {"cell"},
 	["jb_underground_v1"] = {"cell_left", "cell_down", "cell_right", "cell_top"},
-	["ba_jb_ishimura"] = {"PrisonDoor","PrisonDoorClip"}
+	["ba_jail_ishimura_v2"] = {"PrisonDoor","PrisonDoorClip"},
+	["jb_snowynights_V4"] = {"celldoor2","celldoor1"}
 }

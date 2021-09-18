@@ -1,12 +1,12 @@
-GM.Languages = {}
-function GM:LoadLanguage(name)
+Languages = {}
+function LoadLanguage(name)
 	local path = "languages/" .. name .. ".lua"
 	local LANG = include(path)
 	if SERVER then AddCSLuaFile(path) end
-	self.Languages[name] = LANG
+	Languages[name] = LANG
 	return LANG
 end
-local baselang = GM:LoadLanguage("russian") -- base lang
+local baselang = LoadLanguage("ru") or LoadLanguage("en")
 local function countpattern(str)
 	local off, count = 0, 0
 	repeat
@@ -18,7 +18,7 @@ local function countpattern(str)
 	until b == nil
 	return count
 end
-function GM.FormatPhrase(phrase,...)
+function FormatPhrase(phrase,...)
 	if type(phrase) == "string" then
 		-- If just string, return formatted string
 		local result, args = {}, {...}
@@ -26,6 +26,12 @@ function GM.FormatPhrase(phrase,...)
 			if type(v) == "table" and v.r and v.b then
 				table.remove(args, k)
 				table.insert(result, v) -- check for colors
+			end
+		end
+		local cnt = countpattern(phrase)
+		if #args < cnt then
+			for i = cnt - #args, 0, -1 do
+				table.insert(args, "")
 			end
 		end
 		if #result > 0 then -- if contain colors then return table otherwise string
@@ -72,13 +78,29 @@ function GM.FormatPhrase(phrase,...)
 	return result
 end
 if SERVER then
-	function GM.Phrase(phrase,...)
+	function Phrase(phrase,...)
 		--ServerLog(self:FormatPhrase(baselang[phrase], ...))
 		return {phrase, ...}
 	end
 else
-	function GM.Phrase(phrase,...)
-		return GAMEMODE.FormatPhrase(baselang[phrase] or phrase, ...)
+	function Phrase(phrase,...)
+		return FormatPhrase(baselang[phrase] or phrase, ...)
 	end
 end
-_T = GM.Phrase
+_T = Phrase
+function _C(...)
+	local tab = _T(...)
+	if type(tab) == "string" then
+		return tab
+	elseif type(tab) == "table" then
+		return table.concat(tab,"")
+	else
+		return tostring(tab)
+	end
+end
+if SERVER then
+	local files, folds = file.Find("gamemodes/jailbreak/gamemode/languages/*.lua","GAME")
+	for k,v in pairs(files) do
+		AddCSLuaFile("languages/" .. v)
+	end
+end
